@@ -10,13 +10,13 @@
 
 Після запуску програми, користувач може ввести вираз у відповідне поле та натиснути обчислити. Для прикладу можна обчислити наступні вирази:
 1. A & (!C & B) V (D V !(B V A) & (C V D)) & C V !C <br>
-![](https://github.com/BogdanPhoenix/DiscreteMath/raw/master/Image_Result/Example_1.png "Виконання прикладу №1")
+![](https://github.com/BogdanPhoenix/DiscreteMath/raw/main/Image_Result/Example_1.png "Виконання прикладу №1")
 2. A & !C & (D V !B V A) &C V !C <br>
-![](https://github.com/BogdanPhoenix/DiscreteMath/raw/master/Image_Result/Example_2.png "Виконання прикладу №2")
+![](https://github.com/BogdanPhoenix/DiscreteMath/raw/main/Image_Result/Example_2.png "Виконання прикладу №2")
 3. A V !C & (B V !B V !A) V !C <br>
-![](https://github.com/BogdanPhoenix/DiscreteMath/raw/master/Image_Result/Example_3.png "Виконання прикладу №3")
+![](https://github.com/BogdanPhoenix/DiscreteMath/raw/main/Image_Result/Example_3.png "Виконання прикладу №3")
 4. !A & !C & (!D V B & !C) V B & C <br>
-![](https://github.com/BogdanPhoenix/DiscreteMath/raw/master/Image_Result/Example_4.png "Виконання прикладу №4")
+![](https://github.com/BogdanPhoenix/DiscreteMath/raw/main/Image_Result/Example_4.png "Виконання прикладу №4")
 
 Прототипи методів оброботки введених виразів знаходиться у файлі [calculus.h](/calculus.h), а опис методів - у [calculus.cpp](/calculus.cpp).
 
