@@ -1,15 +1,22 @@
 #include "calculus.h"
+#include <QMessageBox>
 
 /*Конструктор*/
 Calculus::Calculus()
 {
-    table = new QMap<QString, QString>();
+    table = new QMap<int, QString>();
     headerTable = new QMap<int, QString>();
-    valuesVariables = new QMap<QChar, QList<bool>>();
+    valuesVariables = new QMap<QString, QList<bool>>();
     valuesExpression = new QList<QMap<int, bool>>();
+
+    regularExpStr.append(conjunction);
+    regularExpStr.append(disjunction);
+    regularExp = new QRegularExpression("[" + regularExpStr + "]");
 }
 /*Деструктор*/
-Calculus::~Calculus(){
+Calculus::~Calculus()
+{
+    delete regularExp;
     delete table;
     delete headerTable;
     delete valuesVariables;
@@ -19,23 +26,32 @@ Calculus::~Calculus(){
     }
 }
 /*Метод для отримання виразу*/
-void Calculus::setExpression(QString text){
+void Calculus::setExpression(QString text)
+{
+    if(text.isEmpty())
+    {
+        QMessageBox::warning(0, "Увага", "Ви не ввели вираз для обчислення. Будь ласка введіть вираз, щоб продовжити роботу.");
+        return;
+    }
     this->expression = text;
 }
 /*Метод для обчислення вказаного виразу*/
-void Calculus::priorityActions(){
-    QMap<QChar, bool> *result;
+void Calculus::priorityActions()
+{
+    QMap<QString, bool> *result;
     //Видалення всіх пробілів
     expression = expression.simplified();
     expression.replace(" ", "");
 
     table->clear();
     headerTable->clear();
-    for(QMap<QChar, QList<bool>>::iterator i = valuesVariables->begin(); i != valuesVariables->end(); ++i){
+    for(QMap<QString, QList<bool>>::iterator i = valuesVariables->begin(); i != valuesVariables->end(); ++i)
+    {
         i.value().clear();
     }
     valuesVariables->clear();
-    for(QList<QMap<int, bool>>::iterator i = valuesExpression->begin(); i != valuesExpression->end(); ++i){
+    for(QList<QMap<int, bool>>::iterator i = valuesExpression->begin(); i != valuesExpression->end(); ++i)
+    {
         i->clear();
     }
     valuesExpression->clear();
@@ -43,15 +59,16 @@ void Calculus::priorityActions(){
     calculateNumberVariables();
     denialPriority(expression);
     bracketsPriority();
-    conjunctionOrDisjunctionPriority(expression, conjunction);
-    conjunctionOrDisjunctionPriority(expression, disjunction);
+    conjunctionOrDisjunctionPriority(expression);
     createHeaderTable();
 
-    for(int i = 0; i < qPow(2, numberVariables); ++i){
-        result = new QMap<QChar, bool>();
+    for(int i = 0; i < qPow(2, numberVariables); ++i)
+    {
+        result = new QMap<QString, bool>();
         resultRow = new QMap<int, bool>();
         //Формування фрагменту значень елементів, які будуть задіюватися для обчислення
-        for(QMap<QChar, QList<bool>>::iterator it = valuesVariables->begin(); it != valuesVariables->end(); ++it){
+        for(QMap<QString, QList<bool>>::iterator it = valuesVariables->begin(); it != valuesVariables->end(); ++it)
+        {
             result->insert(it.key(), it.value().at(i));
         }
         cleansing(*result);
@@ -60,9 +77,10 @@ void Calculus::priorityActions(){
     }
 }
 /*Метод для формування таблиці з результатами*/
-void Calculus::fillingTable(QTableWidget &tableWork){
+void Calculus::fillingTable(QTableWidget &tableWork)
+{
     int index;
-    QMap<QChar, QList<bool>>::iterator it_Variables = valuesVariables->begin();
+    QMap<QString, QList<bool>>::iterator it_Variables = valuesVariables->begin();
     QList<QMap<int, bool>>::iterator it_Expression = valuesExpression->begin();
     QMap<int, QString>::iterator it_Header = headerTable->begin();
 
@@ -88,93 +106,111 @@ void Calculus::fillingTable(QTableWidget &tableWork){
     //Заповнення таблиці значеннями
     for(int i = 0; i < tableWork.rowCount(); ++i){
         index = 0;
-        for(it_Variables = valuesVariables->begin(); it_Variables != valuesVariables->end(); ++it_Variables){
+        for(it_Variables = valuesVariables->begin(); it_Variables != valuesVariables->end(); ++it_Variables)
+        {
             tableWork.setItem(i, index++, new QTableWidgetItem(QString::number(it_Variables.value().at(i))));
         }
-        for(QMap<int, bool>::iterator its = it_Expression->begin(); its != it_Expression->end(); ++its){
+        for(QMap<int, bool>::iterator its = it_Expression->begin(); its != it_Expression->end(); ++its)
+        {
             tableWork.setItem(i, index++, new QTableWidgetItem(QString::number(its.value())));
         }
         ++it_Expression;
     }
 }
 /*Метод для визначення аргументів, створення таблиці з їх даними*/
-void Calculus::calculateNumberVariables(){
-    int num;
+void Calculus::calculateNumberVariables()
+{
     bool push;
-    QList<bool> *list;
-    QList<QChar> bufferSort;
-    QSet<QChar> *buffer = new QSet<QChar>();
+    QList<bool> *listData;
+    QString regularString;
+    regularString.append(conjunction);
+    regularString.append(disjunction);
+    regularString.append(bracketsOpen);
+    regularString.append(bracketsClose);
+    regularString.append(denial);
+    QRegularExpression *regular = new QRegularExpression("[" + regularString + "]");
+    QStringList list = expression.split(*regular);
+    list.removeDuplicates();
+    list.removeOne("");
+    list.sort();
+    numberVariables = list.count();
+    int num = numberVariables - 1;
 
-    //Отримання унікальних аргументіів
-    for(int i = 0; i < expression.length(); ++i){
-        if(expression[i].isLetter() && expression[i] != disjunction){
-            buffer->insert(expression[i]);
-        }
-    }
-    bufferSort = buffer->values();
-    std::sort(bufferSort.begin(), bufferSort.end(), [](const QChar a, const QChar b){ return (a < b); });
-
-    numberVariables = bufferSort.count();
-    num = numberVariables - 1;
-
-    //Заповнення словника значеннями для кожного аргументу
-    for(int i = 0; i < bufferSort.count(); ++i){
+    for(int i = 0; i < list.count(); ++i)
+    {
         push = false;
-        list = new QList<bool>();
-        for(int j = 0; j < numberVariables * numberVariables; ++j){
-            if(j % (int)qPow(2, num) == 0){
+        listData = new QList<bool>();
+        for(int j = 0; j < numberVariables * numberVariables; ++j)
+        {
+            if(j % (int)qPow(2, num) == 0)
+            {
                 push = !push;
             }
-            list->push_back(push);
+            listData->push_back(push);
         }
-        valuesVariables->insert(bufferSort[i], *list);
+        valuesVariables->insert(list.at(i), *listData);
         --num;
-        delete list;
+        delete listData;
     }
 
-    delete buffer;
+    delete regular;
 }
 /*Метод для пошуку елементів, які маю у своєму складі заперечення*/
-void Calculus::denialPriority(QString &text){
-    QString index, findDenial;
-    for(int i = 0; i < text.length() - 1; ++i){
-        if(text[i] == denial && text[i + 1] != bracketsOpen){
-            findDenial = text.mid(i, 2);
-            index = isDuplicate(findDenial);
-            if(!index.length()){
-                index = "*" + QString::number(table->size()) + "*";
-                table->insert(index, findDenial);
+void Calculus::denialPriority(QString &text)
+{
+    int index;
+    QString regularString;
+    regularString.append(conjunction);
+    regularString.append(disjunction);
+    regularString.append(bracketsOpen);
+    regularString.append(bracketsClose);
+    QRegularExpression *regular = new QRegularExpression("[" + regularString + "]");
+    QStringList list = text.split(*regular);
+    list.removeDuplicates();
+
+    foreach (QString value, list)
+    {
+        if(!value.isEmpty() && value.at(0) == denial && value.length() > 1)
+        {
+            index = isDuplicate(value);
+            if(index == -1)
+            {
+                index = table->size();
+                table->insert(index, value);
             }
-            text = text.replace(findDenial, index);
-            --i;
+            text = text.replace(value, "*" + QString::number(index) + "*");
         }
     }
+    delete regular;
 }
 /*Метод для визначення виразі, які розміщенні в дужках та подальше розкладання їх на дії*/
-void Calculus::bracketsPriority(){
-    QString result, text, index;
-    QMap<QString, QString>::iterator it;
-    for(int i = 0; i < expression.length() - 1; ++i){
+void Calculus::bracketsPriority()
+{
+    QString result;
+    QString text;
+    for(int i = 0; i < expression.length() - 1; ++i)
+    {
         if(expression[i] == bracketsOpen){
-            for(int j = i + 1; j < expression.length(); ++j){
-                if(expression[j] == bracketsOpen){
+            for(int j = i + 1; j < expression.length(); ++j)
+            {
+                if(expression[j] == bracketsOpen)
+                {
                     i = j;
                 }
-                else if(expression[j] == bracketsClose){
+                else if(expression[j] == bracketsClose)
+                {
                     text = expression.mid(i + 1, j - i - 1);
-                    conjunctionOrDisjunctionPriority(text, conjunction);
-                    conjunctionOrDisjunctionPriority(text, disjunction);
-                    if(text.length() == 1 && text[0].isDigit()){
-                        it = table->find("*" + text + "*");
-                        it.value() = bracketsOpen + it.value() + bracketsClose;
-                    }
-                    index = "*" + QString::number(table->size()) + "*";
-                    if(i > 0 && expression[i - 1] == denial){
-                        result = denial + QString::number(table->size() - 1);
-                        table->insert(index, result);
+                    conjunctionOrDisjunctionPriority(text);
+                    table->insert(table->lastKey(), bracketsOpen + table->last() + bracketsClose);
+
+                    if(i > 0 && expression[i - 1] == denial)
+                    {
+                        result= text;
+                        text = "*" + QString::number(table->size()) + "*";
+                        table->insert(table->size(), denial + result);
                         --i;
                     }
-                    expression.replace(i, j - i + 1, index);
+                    expression.replace(i, j - i + 1, text);
                     i = -1;
                     break;
                 }
@@ -182,77 +218,148 @@ void Calculus::bracketsPriority(){
         }
     }
 }
-/*Метод для опрацювання дій, які мають кон'юнкцію*/
-void Calculus::conjunctionOrDisjunctionPriority(QString &text, QChar element){
-    QString sub, index;
-    for(int i = 1; i < text.length() - 1; ++i){
-        if(text[i] == element){
-            sub = text.mid(i - 1, 3);
-            index = isDuplicate(sub);
-            if(!index.length()){
-                index = "*" + QString::number(table->size()) + "*";
-                table->insert(index, sub);
-            }
-            text.replace(sub, index);
-            i = 0;
+/*Метод для опрацювання дій, які мають кон'юнкцію або диз'юнкцію*/
+void Calculus::conjunctionOrDisjunctionPriority(QString &text)
+{
+    QStringList list = text.split(*regularExp);
+
+    if(list.count() == 2)
+    {
+        int index = isDuplicate(text);
+        if(index == -1)
+        {
+            index = table->size();
+            table->insert(index, text);
         }
+        text = "*" + QString::number(index) + "*";
     }
+    else
+    {
+        QMap<int, QString> *orderActions = new QMap<int, QString>();
+
+        for(int i = 0; i < list.count(); ++i)
+        {
+            orderActions->insert(i, list.at(i));
+        }
+        actionsAbbreviation(orderActions, text, conjunction);
+        actionsAbbreviation(orderActions, text, disjunction);
+
+        orderActions->clear();
+        delete orderActions;
+
+    }
+    list.clear();
 }
 /*Метод для перевірки чи вже було обчисленно вказану дію*/
-QString Calculus::isDuplicate(QString &text){
-    for(QMap<QString, QString>::iterator j = table->begin(); j != table->end(); ++j){
-        if(j.value() == text){
-            return j.key();
+int Calculus::isDuplicate(const QString &text)
+{
+    QString swapText;
+    int result = -1;
+    QStringList list;
+    for(QMap<int, QString>::iterator j = table->begin(); j != table->end(); ++j)
+    {
+        list = j.value().split(*regularExp);
+        if(list.count() > 1)
+        {
+            if(list.at(0).at(0) == bracketsOpen)
+            {
+                swapText = bracketsOpen + deleteBrackets(list.at(1), bracketsClose) + j.value().at(j.value().indexOf(*regularExp)) + deleteBrackets(list.at(0), bracketsOpen) + bracketsClose;
+            }
+            else
+            {
+                swapText = list.at(1) + j.value().at(j.value().indexOf(*regularExp)) + list.at(0);
+            }
+
+            if(j.value() == text || j.value() == swapText)
+            {
+                result = j.key();
+            }
         }
+        else if(j.value() == text)
+        {
+            result = j.key();
+        }
+        list.clear();
     }
-    return "";
+    return result;
 }
 /*Метод для заповнення словника, який відповідає за шапку таблиці*/
-void Calculus::createHeaderTable(){
-    QString text;
-    QMap<int, QString>::iterator it;
-    for(QMap<QString, QString>::iterator i = table->begin(); i != table->end(); ++i){
-        text = i.value();
-        foreach (auto split, text.split(QRegularExpression("&!V")))
+void Calculus::createHeaderTable()
+{
+    QString formula;
+    QString action;
+    QMap<QString, QString>::iterator it;
+    QStringList list;
+    QString bufferExpression;
+
+    for(QMap<int, QString>::iterator i = table->begin(); i != table->end(); ++i)
+    {
+        formula = "";
+        bufferExpression = i.value();
+        bufferExpression.removeIf([this](const QString &value){ return value == bracketsOpen || value == bracketsClose; });
+        list = bufferExpression.split(*regularExp);
+        if(list.count() > 1)
         {
-            qDebug() << split;
-        }
-        /*for(int j = 0; j < text.length(); ++j){
-            if(text[j].isDigit()){
-                it = table->find(text[j].digitValue());
-                text = text.mid(0, j) + it.value() + text.mid(j + 1);
-                --j;
+            action = bufferExpression.at(bufferExpression.indexOf(*regularExp));
+            formula = getArgumentValue(list.at(0)) + action + getArgumentValue(list.at(1));
+            if(i.value().at(0) == bracketsOpen)
+            {
+                formula = bracketsOpen + formula + bracketsClose;
             }
-        }*/
-        headerTable->insert(headerTable->size(), text);
+        }
+        else
+        {
+            formula = getArgumentValue(i.value());
+        }
+        headerTable->insert(headerTable->size(), formula);
     }
 }
 /*Метод для окремих дій виразу*/
-void Calculus::cleansing(QMap<QChar, bool> &leterValue){
-    QString text;
+void Calculus::cleansing(QMap<QString, bool> &leterValue)
+{
     bool result;
+    QString text;
+    QChar action;
+    QStringList list;
+    QString exeption_1, exeption_2;
+    QString regStr;
+    regStr.append(denial);
+    regStr.append(bracketsOpen);
+    regStr.append(bracketsClose);
+    QRegularExpression *reg = new QRegularExpression("[*" + regStr + regularExpStr + "]");
 
-    for(QMap<QString, QString>::iterator i = table->begin(); i != table->end(); ++i){
+    for(QMap<int, QString>::iterator i = table->begin(); i != table->end(); ++i)
+    {
         text = i.value();
-        for(int j = 0; j < text.length(); ++j){
-            if(text[j] == denial){
-                result = !getValue(chechSymbol(text, j, Direction::Rigth), leterValue);
-                break;
+        list = text.split(*regularExp);
+        exeption_1 = list.at(0);
+        exeption_1.remove(*reg);
+        if(list.count() > 1)
+        {
+            action = text.at(text.indexOf(*regularExp));
+            exeption_2 = list.at(1);
+            exeption_2.remove(*reg);
+
+            if(action == conjunction)
+            {
+                result = getValue(exeption_1, leterValue) && getValue(exeption_2, leterValue);
             }
-            else if(text[j] == conjunction){
-                result = getValue(chechSymbol(text, j, Direction::Left), leterValue) && getValue(chechSymbol(text, j, Direction::Rigth), leterValue);
-                break;
+            else if(action == disjunction)
+            {
+                result = getValue(exeption_1, leterValue) || getValue(exeption_2, leterValue);
             }
-            else if(text[j] == disjunction){
-                result = getValue(chechSymbol(text, j, Direction::Left), leterValue) || getValue(chechSymbol(text, j, Direction::Rigth), leterValue);
-                break;
-            }
+        }
+        else
+        {
+            result = !getValue(exeption_1, leterValue);
         }
         resultRow->insert(resultRow->size(), result);
     }
+    delete reg;
 }
 /*Метод для повернення булевого значення*/
-bool Calculus::getValue(QString element, QMap<QChar, bool> &leterValue){
+bool Calculus::getValue(QString element, QMap<QString, bool> &leterValue)
+{
     if(element.length() == 1 && element.at(0).isLetter())
     {
         return leterValue.find(element.at(0)).value();
@@ -262,66 +369,67 @@ bool Calculus::getValue(QString element, QMap<QChar, bool> &leterValue){
         return resultRow->find(element.toInt()).value();
     }
 }
-
-QString Calculus::chechSymbol(QString &text, int indexStart, Direction direction)
+/*Метод для обчислення виразу з для вказаної дії*/
+void Calculus::actionsAbbreviation(QMap<int, QString> *orderActions, QString &text, const QChar &action)
 {
-    QString result;
-    int index = direction == Direction::Left ? -1 : 1;
-    if(text[indexStart + index] != '*')
+    int index;
+    QStringList actions;
+    for(int i = 0; i < text.length(); ++i)
     {
-        result = text[indexStart + index];
-    }
-    else
-    {
-        result = findNumber(text, indexStart, direction);
-    }
-    return result;
-}
-
-QString Calculus::findNumber(QString &text, int indexStart, Direction direction)
-{
-    QString result;
-
-    if(direction == Direction::Left)
-    {
-        for(int i = indexStart - 2; i > 0; --i)
+        if(text.at(i) == conjunction || text.at(i) == disjunction)
         {
-            if(text[i] == '*')
-            {
-                break;
-            }
-            result += text[i];
-        }
-        std::reverse(result.begin(), result.end());
-    }
-    else if(direction == Direction::Rigth)
-    {
-        for(int i = indexStart + 2; i < text.length(); ++i)
-        {
-            if(text[i] == '*')
-            {
-                break;
-            }
-            result += text[i];
+            actions.append(text.at(i));
         }
     }
 
+    for(int i = 0; i < actions.count(); ++i)
+    {
+        if(actions.at(i) == action)
+        {
+            QString left = orderActions->value(i);
+            QString right = orderActions->value(i + 1);
+            QString result = left + action + right;
+            index = isDuplicate(result);
+            if(index == -1)
+            {
+                index = table->size();
+                table->insert(index, result);
+            }
+            text.replace(result, "*"+QString::number(index)+"*");
+            actions.remove(i);
+            orderActions->insert(i, "*"+QString::number(index)+"*");
+
+            for(int j = i + 1; j < orderActions->count() - 1; ++j)
+            {
+                orderActions->insert(j, orderActions->value(j + 1));
+            }
+            orderActions->remove(orderActions->count() - 1);
+
+            i = -1;
+        }
+    }
+}
+/*Метод для отримання значення аргументу*/
+QString Calculus::getArgumentValue(const QString &argument)
+{
+    bool denialCheck = argument.at(0) == denial;
+    QString regStr = '*' + denial;
+    QString buffer = argument;
+    QString result;
+    QRegularExpression *reg = new QRegularExpression("[" + regStr + regularExpStr + "]");
+    buffer.remove(*reg);
+
+    result = buffer.at(0).isLetter() ? buffer : headerTable->find(buffer.toInt()).value();
+    if(denialCheck)
+    {
+        result = denial + result;
+    }
+    delete reg;
     return result;
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+/*Метод для видалення дужок виразу*/
+QString Calculus::deleteBrackets(const QString &text, const QChar &brackets)
+{
+    QString buffer = text;
+    return buffer.removeIf([brackets](const QChar &value) { return value == brackets; });
+}

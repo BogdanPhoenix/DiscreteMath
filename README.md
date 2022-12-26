@@ -26,104 +26,147 @@
 
 ```c++
 void Calculus::calculateNumberVariables(){
-    ...
+    bool push;
+    QList<bool> *listData;
+    QString regularString;
+    regularString.append(conjunction);
+    regularString.append(disjunction);
+    regularString.append(bracketsOpen);
+    regularString.append(bracketsClose);
+    regularString.append(denial);
+    QRegularExpression *regular = new QRegularExpression("[" + regularString + "]");
+    QStringList list = expression.split(*regular);
+    list.removeDuplicates();
+    list.removeOne("");
+    list.sort();
+    numberVariables = list.count();
+    int num = numberVariables - 1;
 
-    for(int i = 0; i < expression.count(); ++i){
-        if(expression[i].isLetter() && expression[i].toLower() != disjunction){
-            buffer->insert(expression[i]);
-        }
-    }
-    bufferSort = buffer->values();
-    std::sort(bufferSort.begin(), bufferSort.end(), [](const QChar a, const QChar b){ return (a < b); });
-
-    ...
-}
-```
-
-та генерування їх значень:
-```c++
-void Calculus::calculateNumberVariables(){
-    ...
-
-    for(int i = 0; i < bufferSort.count(); ++i){
+    for(int i = 0; i < list.count(); ++i)
+    {
         push = false;
-        list = new QList<bool>();
-        for(int j = 0; j < numberVariables * numberVariables; ++j){
-            if(j % (int)qPow(2, num) == 0){
+        listData = new QList<bool>();
+        for(int j = 0; j < numberVariables * numberVariables; ++j)
+        {
+            if(j % (int)qPow(2, num) == 0)
+            {
                 push = !push;
             }
-            list->push_back(push);
+            listData->push_back(push);
         }
-        valuesVariables->insert(bufferSort[i], *list);
+        valuesVariables->insert(list.at(i), *listData);
         --num;
-        delete list;
+        delete listData;
     }
 
-    ...
+    delete regular;
 }
 ```
 
-в результаті будуть перші стовпчики таблиці.
+в результаті будуть створенні перші стовпчики таблиці.
 
-Далі після генерування ствртових значень відбувається пошук операцій або змінних із запереченням. Для цього використовується метод [denialPriority](/calculus.cpp), який в параметрі приймає посилання на вираз для опрацювання. Відбувається покрокова перевірка кожного елемента на заперечення. Якщо заперечення виявлено, і воно знаходиться не перед відкриваючою дужкою, то виконується заміна змінної із запереченням на відповідний номер дії. Але спершу виконується перевірка на існування вже такої змінної в змінній _table_ (змінна для зберегання номеру дії та її значення, яке є зрозумілим для комп'ютера, деякі фрагменти замінені на цифри).
+Далі після генерування стартових значень відбувається пошук операцій або змінних із запереченням. Для цього використовується метод [denialPriority](/calculus.cpp), який в параметрі приймає посилання на вираз для опрацювання. Відбувається розбиття всього виразу на частини, розділювачами служать дії, окрім заперечення. Далі отриманні окремі частини виразу перевіряються на те, чи перший їх символ є символом заперечення _"!"_ та наступним після нього не йде символ відкривання дужок. Опрацювання заперечення виразу в дужках опрацьовується пізніше. Далі виконується перевірка на існування вже такої змінної в змінній _table_ (змінна для зберегання номеру дії та її значення, яке є зрозумілим для комп'ютера, деякі фрагменти замінені на цифри).
+Після утворення індексу, у виразі дана частинка замінюється на індекс, який розташований між зірочками, даний спосіб виділення дозволяє обчислювати вирази, які мають більше десяти дій у своємо розв'язанні.
 
 ```c++
-void Calculus::denialPriority(QString &text){
+void Calculus::denialPriority(QString &text)
+{
     int index;
-    QString findDenial;
-    for(int i = 0; i < text.length() - 1; ++i){
-        if(text[i] == denial && text[i + 1] != bracketsOpen){
-            findDenial = text.mid(i, 2);
-            index = isDuplicate(findDenial);
-            if(index < 0){
-                table->insert(table->size(), findDenial);
-                index = table->size() - 1;
+    QString regularString;
+    regularString.append(conjunction);
+    regularString.append(disjunction);
+    regularString.append(bracketsOpen);
+    regularString.append(bracketsClose);
+    QRegularExpression *regular = new QRegularExpression("[" + regularString + "]");
+    QStringList list = text.split(*regular);
+    list.removeDuplicates();
+
+    foreach (QString value, list)
+    {
+        if(!value.isEmpty() && value.at(0) == denial && value.length() > 1)
+        {
+            index = isDuplicate(value);
+            if(index == -1)
+            {
+                index = table->size();
+                table->insert(index, value);
             }
-            text = text.replace(findDenial, QString::number(index));
-            --i;
+            text = text.replace(value, "*" + QString::number(index) + "*");
         }
     }
+    delete regular;
 }
 ```
 
-Перевірка на дублікат виразу відбувається в методі [isDuplicate](/calculus.cpp)
+Перевірка на дублікат виразу відбувається в методі [isDuplicate](/calculus.cpp). Даний метод отримує в свої параметри вираз, який потрібно перевірити на наявність в таблиці.
+Після отримання виразу виконується його розбиття на менші частинки без дій. Якщо таких частинок лише одна, то перевірка наявності в таблиці виконується відразу, минуючи утворення оберненого виразу.
+Якщо після розбиття виразу на частинок їх більше ніж одна, то виконується утворення оберненого виразу, щоб виконати його пошук в таблиці даних. 
 
 ```c++
-int Calculus::isDuplicate(QString &text){
-    for(QMap<int, QString>::iterator j = table->begin(); j != table->end(); ++j){
-        if(j.value() == text){
-            return j.key();
+int Calculus::isDuplicate(const QString &text)
+{
+    QString swapText;
+    int result = -1;
+    QStringList list;
+    for(QMap<int, QString>::iterator j = table->begin(); j != table->end(); ++j)
+    {
+        list = j.value().split(*regularExp);
+        if(list.count() > 1)
+        {
+            if(list.at(0).at(0) == bracketsOpen)
+            {
+                swapText = bracketsOpen + deleteBrackets(list.at(1), bracketsClose) + j.value().at(j.value().indexOf(*regularExp)) + deleteBrackets(list.at(0), bracketsOpen) + bracketsClose;
+            }
+            else
+            {
+                swapText = list.at(1) + j.value().at(j.value().indexOf(*regularExp)) + list.at(0);
+            }
+
+            if(j.value() == text || j.value() == swapText)
+            {
+                result = j.key();
+            }
         }
+        else if(j.value() == text)
+        {
+            result = j.key();
+        }
+        list.clear();
     }
-    return -1;
+    return result;
 }
 ```
+
 Наступним кроком є розбиття виразу на дії, які знаходяться в дужках. Цю роботу виконує метод [bracketsPriority](/calculus.cpp):
 
 ```c++
-void Calculus::bracketsPriority(){
-    QString result, text;
-    QMap<int, QString>::iterator it;
-    for(int i = 0; i < expression.length() - 1; ++i){
+void Calculus::bracketsPriority()
+{
+    QString result;
+    QString text;
+    for(int i = 0; i < expression.length() - 1; ++i)
+    {
         if(expression[i] == bracketsOpen){
-            for(int j = i + 1; j < expression.length(); ++j){
-                if(expression[j] == bracketsOpen){
+            for(int j = i + 1; j < expression.length(); ++j)
+            {
+                if(expression[j] == bracketsOpen)
+                {
                     i = j;
                 }
-                else if(expression[j] == bracketsClose){
+                else if(expression[j] == bracketsClose)
+                {
                     text = expression.mid(i + 1, j - i - 1);
-                    conjunctionOrDisjunctionPriority(text, conjunction);
-                    conjunctionOrDisjunctionPriority(text, disjunction);
-                    if(text.length() == 1 && text[0].isDigit()){
-                        it = table->find(text.toInt());
-                        it.value() = bracketsOpen + it.value() + bracketsClose;
-                    }
-                    if(i > 0 && expression[i - 1] == denial){
-                        result = denial + QString::number(table->size() - 1);
-                        table->insert(table->size(),result);
+                    conjunctionOrDisjunctionPriority(text);
+                    table->insert(table->lastKey(), bracketsOpen + table->last() + bracketsClose);
+
+                    if(i > 0 && expression[i - 1] == denial)
+                    {
+                        result= text;
+                        text = "*" + QString::number(table->size()) + "*";
+                        table->insert(table->size(), denial + result);
                         --i;
                     }
-                    expression.replace(i, j - i + 1, QString::number(table->size() - 1));
+                    expression.replace(i, j - i + 1, text);
                     i = -1;
                     break;
                 }
@@ -133,28 +176,87 @@ void Calculus::bracketsPriority(){
 }
 ```
 
-Спершу в методі [bracketsPriority](/calculus.cpp) здійснюється пошук дужки, що відкривається. Далі після виявлення відповідної дужки відбувається пошук дужки, що закриває вираз. Якщо на цьому шляху виявиться іще одна дужка, що відкривається, то номер попередньої дужки, що відкривається, замінюється на новознайдену. Після виявлення дужки, що закривається відбувається розбиття виразу, що знаходиться між дужками, на дії. Спершу здійснюється пошук дій з кон'юнкцією, а після - з диз'юнкцією. Ці перевірки здійснює метод [conjunctionOrDisjunctionPriority](/calculus.cpp), що приймає в параметри посилання на вираз та на логічний символ.
+Спершу в методі [bracketsPriority](/calculus.cpp) здійснюється пошук дужки, що відкривається. Далі після виявлення відповідної дужки відбувається пошук дужки, що закриває вираз. Якщо на цьому шляху виявиться іще одна дужка, що відкривається, то номер попередньої дужки, що відкривається, замінюється на новознайдену. Після виявлення дужки, що закривається відбувається вирізання цієї частини з основного виразу. Далі ця частина передається в метод [conjunctionOrDisjunctionPriority](/calculus.cpp), де виконуються обчислення кон'юнкції та диз'юнкції. Після обислення всього виразу в результаті отримується лише індекс на шматок виразу. Цей шматок поміщається в таблицю, обернутий в дужки. Якщо ж перел дужками виявлено запережечення, то в таблицю _table_ додається іще одна дія, яка буде заперечувати вирізаний шматок. Після всіх маніпуляцій, індекс, в певному форматі (_\*індекс\*_) замінює вирізаний шматок.
+
+В методі [conjunctionOrDisjunctionPriority](/calculus.cpp) наведено спосіб розбиття дій на кон'юнкцію та диз'юнкцію. Якщо вираз має лише одну дію (можна розкласти на дві частини), то виконується спершу перевірка на наявність такого виразу в попередніх діях, якщо не було виявлено схожої або оберненої дії, то виконується приствоєння індексу цій дії та створений індекс з дією додаються в таблицю для майбутніх перевірок.
 
 ```c++
-void Calculus::conjunctionOrDisjunctionPriority(QString &text, QChar element){
-    QString sub;
+void Calculus::conjunctionOrDisjunctionPriority(QString &text)
+{
+    QStringList list = text.split(*regularExp);
+
+    if(list.count() == 2)
+    {
+        int index = isDuplicate(text);
+        if(index == -1)
+        {
+            index = table->size();
+            table->insert(index, text);
+        }
+        text = "*" + QString::number(index) + "*";
+    }
+    else
+    {
+        QMap<int, QString> *orderActions = new QMap<int, QString>();
+
+        for(int i = 0; i < list.count(); ++i)
+        {
+            orderActions->insert(i, list.at(i));
+        }
+        actionsAbbreviation(orderActions, text, conjunction);
+        actionsAbbreviation(orderActions, text, disjunction);
+
+        orderActions->clear();
+        delete orderActions;
+
+    }
+    list.clear();
+}
+```
+
+Якщо у виразі виявлено більше однієї дії, то виконується покрокове розбиття виразу, спершу за кон'юнкцією, а далі за диз'юнкцією. Дане розбиття наведене у методі [actionsAbbreviation](/calculus.cpp).
+
+```c++
+void Calculus::actionsAbbreviation(QMap<int, QString> *orderActions, QString &text, const QChar &action)
+{
     int index;
-    for(int i = 1; i < text.length() - 1; ++i){
-        if(text[i].toLower() == element){
-            sub = text.mid(i - 1, 3);
-            index = isDuplicate(sub);
-            if(index < 0){
-                table->insert(table->size(), sub);
-                index = table->size() - 1;
+    QStringList actions;
+    for(int i = 0; i < text.length(); ++i)
+    {
+        if(text.at(i) == conjunction || text.at(i) == disjunction)
+        {
+            actions.append(text.at(i));
+        }
+    }
+
+    for(int i = 0; i < actions.count(); ++i)
+    {
+        if(actions.at(i) == action)
+        {
+            QString left = orderActions->value(i);
+            QString right = orderActions->value(i + 1);
+            QString result = left + action + right;
+            index = isDuplicate(result);
+            if(index == -1)
+            {
+                index = table->size();
+                table->insert(index, result);
             }
-            text.replace(sub, QString::number(index));
-            i = 0;
+            text.replace(result, "*"+QString::number(index)+"*");
+            actions.remove(i);
+            orderActions->insert(i, "*"+QString::number(index)+"*");
+
+            for(int j = i + 1; j < orderActions->count() - 1; ++j)
+            {
+                orderActions->insert(j, orderActions->value(j + 1));
+            }
+            orderActions->remove(orderActions->count() - 1);
+
+            i = -1;
         }
     }
 }
 ```
-
-Після розбиття виразу на дії виконується перевірка на кількість символів залишилося у виразі і це числове значення розташовується між дужками і додається в змінну _table_ для зберігання. Якщо перед дужкою стояло заперечення, то в таблицю додається заперечення номеру дії, щоб після її виконання виконати необхідне обчислення. І після всіх обчислень виразу, в початковому виразі відбувається заміна на номер дії та присвоююється початковий номер для пошуку нової дужки.
 
 Після розбиття виразів у дужках початковий вираз позбувається їх. Це дає змогу виконати кінцеве розбиття на дії за допомогою метода [conjunctionOrDisjunctionPriority](/calculus.cpp).
 
@@ -162,18 +264,32 @@ void Calculus::conjunctionOrDisjunctionPriority(QString &text, QChar element){
 
 ```c++
 void Calculus::createHeaderTable(){
-    QString text;
-    QMap<int, QString>::iterator it;
-    for(QMap<int, QString>::iterator i = table->begin(); i != table->end(); ++i){
-        text = i.value();
-        for(int j = 0; j < text.length(); ++j){
-            if(text[j].isDigit()){
-                it = table->find(text[j].digitValue());
-                text = text.mid(0, j) + it.value() + text.mid(j + 1);
-                --j;
+    QString formula;
+    QString action;
+    QMap<QString, QString>::iterator it;
+    QStringList list;
+    QString bufferExpression;
+
+    for(QMap<int, QString>::iterator i = table->begin(); i != table->end(); ++i)
+    {
+        formula = "";
+        bufferExpression = i.value();
+        bufferExpression.removeIf([this](const QString &value){ return value == bracketsOpen || value == bracketsClose; });
+        list = bufferExpression.split(*regularExp);
+        if(list.count() > 1)
+        {
+            action = bufferExpression.at(bufferExpression.indexOf(*regularExp));
+            formula = getArgumentValue(list.at(0)) + action + getArgumentValue(list.at(1));
+            if(i.value().at(0) == bracketsOpen)
+            {
+                formula = bracketsOpen + formula + bracketsClose;
             }
         }
-        headerTable->insert(headerTable->size(), text);
+        else
+        {
+            formula = getArgumentValue(i.value());
+        }
+        headerTable->insert(headerTable->size(), formula);
     }
 }
 ```
@@ -184,38 +300,60 @@ void Calculus::createHeaderTable(){
 
 ```c++
 void Calculus::cleansing(QMap<QChar, bool> &leterValue){
-    QString text;
     bool result;
-    for(QMap<int, QString>::iterator i = table->begin(); i != table->end(); ++i){
+    QString text;
+    QChar action;
+    QStringList list;
+    QString exeption_1, exeption_2;
+    QString regStr;
+    regStr.append(denial);
+    regStr.append(bracketsOpen);
+    regStr.append(bracketsClose);
+    QRegularExpression *reg = new QRegularExpression("[*" + regStr + regularExpStr + "]");
+
+    for(QMap<int, QString>::iterator i = table->begin(); i != table->end(); ++i)
+    {
         text = i.value();
-        for(int j = 0; j < text.length(); ++j){
-            if(text[j] == denial){
-                result = !getValue(text[j + 1], leterValue);
-                break;
+        list = text.split(*regularExp);
+        exeption_1 = list.at(0);
+        exeption_1.remove(*reg);
+        if(list.count() > 1)
+        {
+            action = text.at(text.indexOf(*regularExp));
+            exeption_2 = list.at(1);
+            exeption_2.remove(*reg);
+
+            if(action == conjunction)
+            {
+                result = getValue(exeption_1, leterValue) && getValue(exeption_2, leterValue);
             }
-            else if(text[j] == conjunction){
-                result = getValue(text[j-1], leterValue) && getValue(text[j + 1], leterValue);
-                break;
+            else if(action == disjunction)
+            {
+                result = getValue(exeption_1, leterValue) || getValue(exeption_2, leterValue);
             }
-            else if(text[j].toLower() == disjunction){
-                result = getValue(text[j-1], leterValue) || getValue(text[j + 1], leterValue);
-                break;
-            }
+        }
+        else
+        {
+            result = !getValue(exeption_1, leterValue);
         }
         resultRow->insert(resultRow->size(), result);
     }
+    delete reg;
 }
 ```
 
 Даний метод бере і виконує ті дії, які були розбитті до цього на частини. За допомогою метода [getValue](/calculus.cpp), в залежності від типу елемента (цілочисельний або символьний), вибирається відповідний результат. Якщо символ є цілочисельного типу, то повертається результат обчислення тієї дії, якої вказане число, а інакте повертається результат тієї змінної, якій відповідає даний символ.
 
 ```c++
-bool Calculus::getValue(QChar element, QMap<QChar, bool> &leterValue){
-    if(element.isDigit()){
-        return resultRow->find(element.digitValue()).value();
+bool Calculus::getValue(QString element, QMap<QString, bool> &leterValue)
+{
+    if(element.length() == 1 && element.at(0).isLetter())
+    {
+        return leterValue.find(element.at(0)).value();
     }
-    else{
-        return leterValue.find(element).value();
+    else
+    {
+        return resultRow->find(element.toInt()).value();
     }
 }
 ```
